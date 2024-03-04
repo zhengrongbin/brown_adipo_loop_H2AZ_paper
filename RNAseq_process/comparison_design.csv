@@ -1,5 +1,4 @@
 ,KD_minusCL_rep1,KD_minusCL_rep2,KD_minusCL_rep3,KD_plusCL_rep1,KD_plusCL_rep2,KD_plusCL_rep3,shNT_minusCL_rep1,shNT_minusCL_rep2,shNT_minusCL_rep3,shNT_plusCL_rep1,shNT_plusCL_rep2,shNT_plusCL_rep3
 KD_plusCL_vs_minusCL,0,0,0,1,1,1,,,,,,
 shNT_plusCL_vs_minusCL,,,,,,,0,0,0,1,1,1
-minusCL_KD_vs_shNT,1,1,1,,,,0,0,0,,,
 plusCL_KD_vs_shNT,,,,1,1,1,,,,0,0,0
