@@ -43,3 +43,12 @@
 <li>ChIP_ATAC_process/danpos_run.sh</li>
 <p>An example for running [DANPOS2](https://sites.google.com/site/danposdoc/) software to call peaks for ChIP-seq and ATAC-seq data</p>
 
+### Downstream analysis
+<li>Compartment_TAD_analysis_03012024.ipynb or Compartment_TAD_analysis_03012024.py</li>
+<p>The jupytor notebook or python script for Compartment and TAD downstream analysis based the outputs from proprocessing steps</p>
+
+<li>MicroC_H2AZ_20240229.ipynb or MicroC_H2AZ_20240229.py</li>
+<p>The jupytor notebook or python script for loop analysis and integration with H2AZ ChIP-seq, ATAC-seq, RNA-seq, and GWAS based the outputs from proprocessing steps</p>
+
+<li>exp_analysis_02292024.ipynb or exp_analysis_02292024.py</li>
+<p>The jupytor notebook or python script for RNA-seq data downstream analysis based the outputs from proprocessing steps</p>
