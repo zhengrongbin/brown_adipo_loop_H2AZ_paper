@@ -7,7 +7,23 @@
 
 echo 'running'
 
-pair_new='shNT_plusCL_mapq5_merge.pairs'
+name='shNT_plusCL'
+pair_new=${name}_mapq5_merge.pairs
+
+### merge replicates, we have four replicates with 300M reads for each, and four pilot samples with 60M reads for each
+pairtools merge -o ${pair_new} --nproc 16 ${name}_rep1.pairs.mapq5.pairs \
+${name}_rep2.pairs.mapq5.pairs \
+${name}_rep3.pairs.mapq5.pairs \
+${name}_rep4.pairs.mapq5.pairs \
+${name}_rep1_pilot.pairs.mapq5.pairs \
+${name}_rep2_pilot.pairs.mapq5.pairs \
+${name}_rep3_pilot.pairs.mapq5.pairs \
+${name}_rep4_pilot.pairs.mapq5.pairs 
+
+### generate QC
+echo "+++get QC"
+pairtools stats ${pair_new} > ${pair_new}_stats.txt
+
 ## get high quality reads: remove mapping quality scores less than 5, and remove read pair distance less than 100bp due to potential random ligation
 awk '{
     if ( $0 ~ /^#chromsize/ ) {
