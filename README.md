@@ -1,7 +1,7 @@
-# scripts and notebooks for Micro-C, ChIP-seq, ATAC-seq, and RNA-seq data analysis
+## scripts and notebooks for Micro-C, ChIP-seq, ATAC-seq, and RNA-seq data analysis (revision analysis included)
 ### dependency and version control
 <li>Python==3.8, R==4.1</li>
-<li>Micro-C analysis: Galore (version 0.6.6), BWA (version 0.7.17-r1188), pairtools (version 1.0.0), COOLER (version 0.9.1), JUICER (version 1.22.01), peakachu (downloaded at July 2023), BedTools (version 2.31.0), pybedtools (version 0.9.1)</li>
+<li>Micro-C analysis: Galore (version 0.6.6), BWA (version 0.7.17-r1188), pairtools (version 1.0.0), COOLER (version 0.9.1), JUICER (version 1.22.01), peakachu (downloaded at July 2023), BedTools (version 2.31.0), pybedtools (version 0.9.1), AdaLiftOver (version 1.0.0), hicrep python (https://github.com/dejunlin/hicrep)</li>
 <li>RNA-seq analysis: Galore (version 0.6.6), STAR (version 2.7.9a), deepTools (version 3.3.1), SamTools (version 1.16.1), DESeq2 (R package, version 1.32.0), fgsea (R package, version 1.18.0), gseapy (Python package, version 1.0.6)</li>
 <li>ChIP-seq and ATAC-seq analysis: CHIPs pipeline (https://github.com/liulab-dfci/CHIPS), DANPOS2, BedTools (version 2.31.0), pybedtools (Python package, version 0.9.1), pyBigWig (Python package, version 0.3.20)</li>
 
@@ -14,10 +14,18 @@ The script can be run on a normal computer with enough RAM. However, we recommen
 
 ### Downloading the data
 <p>The raw data for RNA-seq, Micro-C, ChIP-seq, and ATAC-seq data has been deposited to NCBI GEO repository under accession numbers:</p>
-<li>GSE261413 for RNA-seq</li>
-<li>GSE261416 for Micro-C</li>
-<li>GSE261412 for ChIP-seq</li>
-<li>GSE261410 for ATAC-seq</li>
+| Accession	| Title	| Samples |
+| ------------- | ------------- | ------------- |
+| GSE301359	| RNA-seq human | 9 |
+| GSE301360	| CUT&Run mouse | 10 |
+| GSE301361	| PRO-seq mouse | 6 |
+| GSE301366	| ChIP-seq mouse, CTCF, SMC1, MED1 | 24 |
+| GSE301368	| ChIP-seq human | 10 |
+| GSE301370	| Micro-C human | 12 |
+| GSE261410	| ATAC-Seq mouse | 6 |
+| GSE261412	| ChIP-Seq mouse, H3K27ac, H3K4me3, H2AZ | 24 |
+| GSE261413	| RNA-Seq mouse | 9 |
+| GSE261416	| Micro-C mouse | 24 |
 
 ### RNA-seq
 <li>RNAseq_process/RNAseq_data_preprocessing_cmd.sh</li>
@@ -62,12 +70,36 @@ The script can be run on a normal computer with enough RAM. However, we recommen
 <li>ChIP_ATAC_process/danpos_run.sh</li>
 <p>An example for running [DANPOS2](https://sites.google.com/site/danposdoc/) software to call peaks for ChIP-seq and ATAC-seq data</p>
 
-### Downstream analysis
-<li>Compartment_TAD_analysis_03012024.ipynb or Compartment_TAD_analysis_03012024.py</li>
-<p>The jupytor notebook or python script for Compartment and TAD downstream analysis based the outputs from proprocessing steps</p>
+### Python codes for Downstream analysis
+<li>Compartment_TAD_analysis_03012024.py</li>
+<p>The python script for Compartment and TAD downstream analysis using the outputs from proprocessing steps</p>
 
-<li>MicroC_H2AZ_20240229.ipynb or MicroC_H2AZ_20240229.py</li>
-<p>The jupytor notebook or python script for loop analysis and integration with H2AZ ChIP-seq, ATAC-seq, RNA-seq, and GWAS based the outputs from proprocessing steps</p>
+<li>Mouse_MicroC_ChIP_updated_2025.py</li>
+<p>The python script for mouse loop analysis and integration with and between ChIP-seq (H2AZ, H3K27ac, CTCF, SMC1, and MED1), ATAC-seq, and RNA-seq using the outputs from proprocessing steps</p>
 
-<li>exp_analysis_02292024.ipynb or exp_analysis_02292024.py</li>
-<p>The jupytor notebook or python script for RNA-seq data downstream analysis based the outputs from proprocessing steps</p>
+<li>human_MicroC_analysis_2025.py</li>
+<p>The python script for human loop analysis and integration with and between ChIP-seq (H2AZ, H3K27ac), RNA-seq, and GWAS data using the outputs from proprocessing steps</p>
+
+<li>exp_analysis_02292024.py</li>
+<p>The python script for RNA-seq data downstream analysis using the outputs from proprocessing steps</p>
+
+<li>PROseq_and_eRNA_analysis_2025.py</li>
+<p>The python script for PRO-seq data downstream analysis using the outputs from proprocessing steps. The PRO-seq data was preprocessed by core facility using their pipeline at (https://github.com/AdelmanLab/NIH_scripts)</p>
+<li>Noted that all python scripts above were run in jupyter notebooks. If reproduce our analysis using these script, it is highly recommended to excute it block-by-block using jupyter notebook following comments annonated in the file. The file path in the script remains change to the new folder structure. </li>
+
+### Supporting python, R, or bash script for Downstream analysis
+<li>replicateCorrelation.sh</li>
+<p>A bash script to compute correlations between Micro-C replicates using hicrep software taking COOL files as input.</p>
+
+<li>homer_eRNA_call.sh</li>
+<p>A bash script to call eRNA peaks on PRO-seq data, bedgraph file of 5' signal was used as input.</p>
+
+<li>adaliftover_run2.R</li>
+<p>A R script to lift over mouse loop anchor into human genome using AdaLiftOver software by considering both epigenomics and sequence similarity.</p>
+
+<li>download_human_snp_LD.py</li>
+<p>A python script to download LD associations for SNPs using LDlink API</p>
+
+<li>LD_expand.py</li>
+<p>A python script for the LD expansion analysis using lead SNPs in a window around loop anchor center. The output of this script will be used into GWAS analysis in human_MicroC_analysis_2025.py</p>
+
