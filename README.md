@@ -14,6 +14,7 @@ The script can be run on a normal computer with enough RAM. However, we recommen
 
 ### Downloading the data
 <p>The raw data for RNA-seq, Micro-C, ChIP-seq, and ATAC-seq data has been deposited to NCBI GEO repository under accession numbers:</p>
+
 | Accession  | Title                                    | Samples |
 |-----------:|------------------------------------------|--------:|
 | GSE261410  | ATAC-Seq (mouse)                         |       6 |
