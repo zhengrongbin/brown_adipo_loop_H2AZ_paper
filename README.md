@@ -14,18 +14,18 @@ The script can be run on a normal computer with enough RAM. However, we recommen
 
 ### Downloading the data
 <p>The raw data for RNA-seq, Micro-C, ChIP-seq, and ATAC-seq data has been deposited to NCBI GEO repository under accession numbers:</p>
-| Accession	| Title	| Samples |
-| ------------- | ------------- | ------------- |
-| GSE301359	| RNA-seq human | 9 |
-| GSE301360	| CUT&Run mouse | 10 |
-| GSE301361	| PRO-seq mouse | 6 |
-| GSE301366	| ChIP-seq mouse, CTCF, SMC1, MED1 | 24 |
-| GSE301368	| ChIP-seq human | 10 |
-| GSE301370	| Micro-C human | 12 |
-| GSE261410	| ATAC-Seq mouse | 6 |
-| GSE261412	| ChIP-Seq mouse, H3K27ac, H3K4me3, H2AZ | 24 |
-| GSE261413	| RNA-Seq mouse | 9 |
-| GSE261416	| Micro-C mouse | 24 |
+| Accession  | Title                                    | Samples |
+|-----------:|------------------------------------------|--------:|
+| GSE261410  | ATAC-Seq (mouse)                         |       6 |
+| GSE261412  | ChIP-Seq (mouse: H3K27ac, H3K4me3, H2AZ) |      24 |
+| GSE261413  | RNA-Seq (mouse)                          |       9 |
+| GSE261416  | Micro-C (mouse)                          |      24 |
+| GSE301359  | RNA-Seq (human)                          |       9 |
+| GSE301360  | CUT&RUN (mouse)                          |      10 |
+| GSE301361  | PRO-seq (mouse)                          |       6 |
+| GSE301366  | ChIP-Seq (mouse: CTCF, SMC1, MED1)       |      24 |
+| GSE301368  | ChIP-Seq (human)                         |      10 |
+| GSE301370  | Micro-C (human)                          |      12 |
 
 ### RNA-seq
 <li>RNAseq_process/RNAseq_data_preprocessing_cmd.sh</li>
