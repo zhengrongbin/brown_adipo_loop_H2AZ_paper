@@ -1527,6 +1527,14 @@ plt.close()
 
 ## consider LD in GWAS snps
 hg38_gwas = pd.read_csv('../../MicroC/hg38_GWAScatelog_UCSC.tsv', sep = '\t')
+
+## non-trait associated SNPs for background control
+nonsig_snp = hg38_gwas[~hg38_gwas['name'].isin(hg38_gwas.query('pValue < 1e-8')['name'].unique())]
+keep = [f"chr{i}" for i in list(range(1,23)) + ["X","Y","M"]]
+nonsig_snp = nonsig_snp[nonsig_snp['chrom'].isin(keep)]
+nonsig_snp = nonsig_snp[['chrom','chromStart', 'chromEnd']].drop_duplicates()
+
+
 hg38_gwas = hg38_gwas.query('pValue < 1e-8')## select significant associations
 hg38_gwas['label'] = hg38_gwas['chrom']+':'+hg38_gwas['chromStart'].astype('str')+'-'+hg38_gwas['chromEnd'].astype('str')+'_'+hg38_gwas['name']+'_'+hg38_gwas['trait']
 hg38_gwas_bed = pybedtools.BedTool.from_dataframe(hg38_gwas[['chrom','chromStart','chromEnd','label']])
@@ -1586,23 +1594,34 @@ for t, r, l in [['EP', EP_res, FSK_induce_KD_down_EP],
     tmp['Type'] = t
     H2AZ_bind_loops = pd.concat([H2AZ_bind_loops, tmp])
 
-## prepare different loop sets for SNP analysis
-### FSK up loop
-human_up_loop_bed = pybedtools.BedTool.from_dataframe(
-    pd.DataFrame(up_loop.iloc[:,:3].values.tolist()+up_loop.iloc[:,3:6].values.tolist()).drop_duplicates()
-)
-## stable loop
-human_stable_loop_bed = pybedtools.BedTool.from_dataframe(
-    pd.DataFrame(stable_loop.iloc[:,:3].values.tolist()+stable_loop.iloc[:,3:6].values.tolist()).drop_duplicates()
-)
-## H2AZ dependent loop
-human_FSK_induce_KD_down_loop_bed = pybedtools.BedTool.from_dataframe(
-    pd.DataFrame(FSK_induce_KD_down_loop.iloc[:,:3].values.tolist()+FSK_induce_KD_down_loop.iloc[:,3:6].values.tolist()).drop_duplicates()
-)
+## prepare loop sets for SNP analysis
 ## H2AZ occupied loop
 human_FSK_induce_KD_down_H2AZ_bind_loop_bed = pybedtools.BedTool.from_dataframe(
     pd.DataFrame(H2AZ_bind_loops.iloc[:,:3].values.tolist()+H2AZ_bind_loops.iloc[:,3:6].values.tolist()).drop_duplicates()
 )
+## background SNP sets
+background_nonasso_snp_bed = pybedtools.BedTool.from_dataframe(nonsig_snp[['chrom','chromStart','chromEnd']].drop_duplicates())
+
+from statsmodels import stats as ss
+## perform Fisher exact test to evaluate significant overlap between SNP loci and loop anchors
+def _fisher_vs_background_(loop_bed, background_bed, gwas_df_bed, gwas_df):
+    fishr_res = collections.defaultdict()
+    trait_list = loop_bed.intersect(gwas_df_bed, wb = True).to_dataframe()['blockCount'].unique().tolist()
+    fishr_res = collections.defaultdict()
+    for trait in trait_list:
+        trait_bed = pybedtools.BedTool.from_dataframe(gwas_df.query('trait == @trait').iloc[:,0:3])
+        # overlap counts
+        a = len(trait_bed.intersect(loop_bed, u=True))  # trait in region
+        b = len(trait_bed.subtract(loop_bed, A=True))   # trait not in region
+        c = len(background_bed.intersect(loop_bed, u=True)) - a
+        d = len(background_bed.subtract(loop_bed, A=True)) - b
+        N = a + b + c + d
+        fold_enrichment = (a * N) / ((a + b) * (a + c))
+        oddsratio, p = fisher_exact([[a,b],[c,d]], alternative='greater')
+        fishr_res[trait] = [[[a,b],[c,d]], p, oddsratio, fold_enrichment]
+    fishr_res = pd.DataFrame(fishr_res, index = ['table', 'pval', 'ratio', 'Fold']).T
+    fishr_res['FDR'] = ss.multitest.multipletests(fishr_res['pval'], method='fdr_bh')[1]
+    return(fishr_res)
 
 ## compute number of overlapped SNPs in GWAS
 def _comput_snp_overlap_(loop_bed, gwas_df, promoter_remove = False):
@@ -1615,12 +1634,6 @@ def _comput_snp_overlap_(loop_bed, gwas_df, promoter_remove = False):
     loop_snp = pd.merge(loop_snp, gwas_df[['label', 'trait']].drop_duplicates(), left_on = 'thickStart', right_on = 'label')
     return(loop_snp)
 ## overlap with SNP
-#### up loop
-human_up_loop_snp = _comput_snp_overlap_(human_up_loop_bed, gwas_df = pd.concat([hg38_gwas_LD_expended, hg38_gwas_lead]))
-### stable loop
-human_stable_loop_snp = _comput_snp_overlap_(human_stable_loop_bed, gwas_df = pd.concat([hg38_gwas_LD_expended, hg38_gwas_lead]))
-### H2AZ dependent loop
-human_FSK_induce_KD_down_loop_snp = _comput_snp_overlap_(human_FSK_induce_KD_down_loop_bed, gwas_df = pd.concat([hg38_gwas_LD_expended, hg38_gwas_lead]))
 #### H2AZ occupied loop
 human_FSK_induce_KD_down_H2AZ_bind_loop_snp = _comput_snp_overlap_(human_FSK_induce_KD_down_H2AZ_bind_loop_bed, 
                                                                    gwas_df = pd.concat([hg38_gwas_LD_expended, hg38_gwas_lead]))
@@ -1631,160 +1644,78 @@ pybedtools.BedTool.from_dataframe(human_FSK_induce_KD_down_H2AZ_bind_loop_snp[['
 ).to_dataframe().drop_duplicates()['name'].unique().shape[0] * 100 / human_FSK_induce_KD_down_H2AZ_bind_loop_snp['itemRgb'].unique().shape[0]
 
 
-# In[ ]:
+## perfrom enrichment analysis
+## background=non-trait associated snps
+gwas_df_bed = pybedtools.BedTool.from_dataframe(gwas_df)
+H2AZ_occu_fres_bg = _fisher_vs_background_(human_FSK_induce_KD_down_H2AZ_bind_loop_bed, background_nonasso_snp_bed, gwas_df_bed, gwas_df)
 
 
-### normalize the SNP count per a thousand loop
-## summary of the overlapped SNP numbers per trait
-res = pd.concat([human_up_loop_snp.groupby('trait')['trait'].count(),
-                 human_stable_loop_snp.groupby('trait')['trait'].count(),
-                 human_FSK_induce_KD_down_loop_snp.groupby('trait')['trait'].count(),
-                 human_FSK_induce_KD_down_H2AZ_bind_loop_snp.groupby('trait')['trait'].count(),
-                ], axis = 1).fillna(0)
-res.columns = ['FSK_up','FSK_stable', 'FSK_up_KD_down', 'FSK_up_KD_down_H2AZ']
+## Visualize obesity related traits using bar chart
+traits = ["Waist-to-hip ratio adjusted for BMI",
+          "Waist circumference adjusted for body mass index",
+          "Metabolically unhealthy in obesity",
+"Body fat percentage and type 2 diabetes (pairwise)",
+"Body mass index and type 2 diabetes (pairwise)",
+"Fasting insulin",
+"Fasting glucose",
+"Body fat percentage or coronary artery disease (MTAG)",
+"Nonalcoholic fatty liver disease (imputed)",
+          "Hip circumference adjusted for BMI",
+"Weight",
+"Triglycerides",
+"Coronary artery disease",
+"Body mass index",
+"Body fat percentage",
+"Type 2 diabetes"]
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from matplotlib import colors
 
+plot_df = H2AZ_occu_fres_bg.loc[traits].reset_index()
+plot_df['significance'] = -np.log10(plot_df['FDR'].tolist())
+plot_df = plot_df.sort_values('Fold')
 
-total_loops_num = pd.Series([pd.DataFrame(up_loop.iloc[:,:3].values.tolist()+up_loop.iloc[:,3:6].values.tolist()).drop_duplicates().shape[0],
-                             pd.DataFrame(stable_loop.iloc[:,:3].values.tolist()+stable_loop.iloc[:,3:6].values.tolist()).drop_duplicates().shape[0], 
-                             pd.DataFrame(FSK_induce_KD_down_loop.iloc[:,:3].values.tolist()+FSK_induce_KD_down_loop.iloc[:,3:6].values.tolist()).drop_duplicates().shape[0],
-                             pd.DataFrame(H2AZ_bind_loops.iloc[:,:3].values.tolist()+H2AZ_bind_loops.iloc[:,3:6].values.tolist()).drop_duplicates().shape[0],
-                            ],
-                           index= res.columns)
+# Example setup
+values = plot_df['significance']  # e.g., -log10(FDR)
+folds = plot_df['Fold']
 
-## compute the enrichment score - # of SNP per a thousand loop anchors
-res_norm_expand = res.apply(lambda row: row*1000/total_loops_num, axis = 1)
+# Define your custom low and high colors
+low_color = "pink"   # light blue (low end)
+high_color = "red"  # dark blue (high end)
 
-## heatmap
-## 
-focus_traits_new = [
-    'Waist-to-hip ratio adjusted for BMI',
-    'Waist circumference adjusted for body mass index',
-    'A body shape index',
-    'Body fat distribution (trunk fat ratio)',
-    'Body fat percentage and type 2 diabetes (pairwise)',
-    'Body mass index and type 2 diabetes (pairwise)',
-    'Birth weight (MTAG)',
-    'Metabolically unhealthy in obesity',
-    'Coronary artery disease and LDL cholesterol levels (multivariate analysis)',
-    'Total lipid levels in HDL',
-    'Triacylglycerol',
-    'Cholesterol',
-    'Low density lipoprotein cholesterol levels',
-    'Blood glucose levels',
-    'Fasting insulin',
-    'Homeostasis model assessment of insulin resistance',
-    'Nonalcoholic fatty liver disease (imputed)',
-]
+# Create custom colormap (2-point gradient)
+cmap = colors.LinearSegmentedColormap.from_list("custom_cmap", [low_color, high_color])
 
-columns = ['FSK_up', 'FSK_stable', 'FSK_up_KD_down', 'FSK_up_KD_down_H2AZ']
+# Normalize data to color range
+norm = colors.Normalize(vmin=0, vmax=14)
 
-df = res_norm_expand.loc[focus_traits_new,columns]
-df = df.apply(lambda row: (row - np.mean(row))/np.std(row), axis = 1)
-fig, ax = plt.subplots(figsize = (10, 8))
-sns.heatmap(data = df.dropna(), cmap = 'RdBu_r', center = 0, square = True)
+# Map normalized values to colors
+mapped_colors = cmap(norm(values))
+
+# --- Plot ---
+fig, ax = plt.subplots(figsize=(7.5, 4))
+
+bars = ax.barh(
+    y=plot_df['index'],
+    width=folds,
+    color=mapped_colors,
+    edgecolor='none'
+)
+
+# Add colorbar
+sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+sm.set_array([])
+cbar = plt.colorbar(sm, ax=ax, pad=0.02, shrink = 0.5)
+cbar.set_label('-log10(FDR)', rotation=270, labelpad=15)
+
+# Labels and styling
+ax.set_xlabel('Fold enrichment')
+ax.set_ylabel('')
+ax.set_ylim(-0.5, plot_df.shape[0] - 0.5)
+sns.despine()
 plt.tight_layout()
+fig.savefig('GWAS_res_updated_enrichment_fisher_bg_use_nontraitsnp_barplot.pdf')
 plt.show()
-
-
-
-# ### conservation analysis between mouse loop and human loop
-# 
-
-# In[ ]:
-
-
-## load mouse loop sets
-## different mouse loop type
-mm_EP_loop = pd.read_csv('../mouse_EP_df.csv', index_col = 0)
-mm_PP_loop = pd.read_csv('../mouse_PP_df.csv', index_col = 0)
-mm_PO_loop = pd.read_csv('../mouse_PO_df.csv', index_col = 0)
-mm_OO_loop = pd.read_csv('../mouse_OO_df.csv', index_col = 0)
-
-## union loops
-mm_loop_pk = pk.load(open('../../MicroC/loop_set.pk', 'rb'))
-mm_union_loop = mm_loop_pk['union_loops']
-mm_union_loop['r1'] = mm_union_loop.iloc[:,0:3].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
-mm_union_loop['r2'] = mm_union_loop.iloc[:,3:6].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
-mm_union_loop.to_csv('union_loop_set_anchors.bed', sep = '\t', index = None, header = None)
-
-## ---- run adaliftover for mouse loop to find human genomic locatons by considering both sequence and epigenomics
-#### bash: Rscript adaliftover_run2.R union_loop_set_anchors.bed
-### this will generate a file named mm_union_loop_adliftover_to_hg38.txt
-
-## load mouse adaliftover to hg38
-mm_to_hg38_set = pd.read_csv('../adaliftover/mm_union_loop_adliftover_to_hg38.txt', sep = '\t', header = None)
-mm_to_hg38_set.columns = ['seqnames','start','end','width','strand','epigenome','grammar','score', 'mm_anchor']
-
-
-# In[ ]:
-
-
-## loop conservation comparison by comparing liftover human loop location with real human loop sets
-lift_term = 'score'
-lift_cut = 0.3
-gap = 20000
-resolution = 5000
-
-mm_loop = mm_union_loop.iloc[:,0:6].copy()
-
-mm_loop['r1'] = mm_loop.iloc[:,0:3].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
-mm_loop['r2'] = mm_loop.iloc[:,3:6].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
-
-## compare
-tmp_set = mm_to_hg38_set[mm_to_hg38_set[lift_term] > lift_cut]
-mm_loop['lifted'] = mm_loop['r1'].isin(tmp_set['mm_anchor']) & mm_loop['r2'].isin(tmp_set['mm_anchor'])
-
-## focus on lifted loops
-mm_loop_cons = mm_loop.query('lifted == True')
-## defined lifted human loop sites
-lifted_loops = []
-for i, line in mm_loop_cons.iterrows():
-    r1, r2 = line['r1'], line['r2']
-    r1_set = tmp_set[tmp_set['mm_anchor'] == r1].iloc[0,0:3].tolist()
-    r2_set = tmp_set[tmp_set['mm_anchor'] == r2].iloc[0,0:3].tolist()
-    lifted_loops.append(r1_set+r2_set+[i])
-lifted_loops = pd.DataFrame(lifted_loops, columns = ['chrom1', 'start1', 'end1', 'chrom2', 'start2', 'end2', 'mm_loop'])
-
-## get rid of lifted to different chromosome
-lifted_loops = lifted_loops.query('chrom1 == chrom2')
-lifted_loops['start1'] = lifted_loops['start1'].astype('int')
-lifted_loops['start2'] = lifted_loops['start2'].astype('int')
-lifted_loops['end1'] = lifted_loops['end1'].astype('int')
-lifted_loops['end2'] = lifted_loops['end2'].astype('int')
-lifted_loops = lifted_loops.sort_values(['chrom1', 'start1'])
-lifted_loops['r1_center'] = lifted_loops['start1']+int(1/resolution)
-lifted_loops['r2_center'] = lifted_loops['start2']+int(1/resolution)
-
-## human loop set
-hs_loop = loop_dots_need.iloc[:,0:6].copy()
-hs_loop['hs_loop'] = loop_dots_need['label'].tolist()
-hs_loop['r1'] = hs_loop.iloc[:,0:3].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
-hs_loop['r2'] = hs_loop.iloc[:,3:6].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
-
-hs_loop['r1_center'] = hs_loop['start1']+int(1/resolution)
-hs_loop['r2_center'] = hs_loop['start2']+int(1/resolution)
-
-## 
-signal_conserved = []
-for i, line in lifted_loops.iterrows():
-    chrom, r1_center, r2_center = line[['chrom1', 'r1_center', 'r2_center']]
-    tmp1 = hs_loop[(hs_loop['chrom1'] == chrom) & 
-                (hs_loop['start1']-gap+(0.5*resolution) < r1_center) & 
-                (hs_loop['end1']+gap-(0.5*resolution) > r1_center) &
-                (hs_loop['start2']-gap+(0.5*resolution) < r2_center) & 
-                (hs_loop['end2']+gap-(0.5*resolution) > r2_center)]
-    tmp2 = hs_loop[(hs_loop['chrom1'] == chrom) & 
-                (hs_loop['start1']-gap+(0.5*resolution) < r2_center) & 
-                (hs_loop['end1']+gap-(0.5*resolution) > r2_center) &
-                (hs_loop['start2']-gap+(0.5*resolution) < r1_center) & 
-                (hs_loop['end2']+gap-(0.5*resolution) > r1_center)]
-    if tmp1.shape[0] > 0:
-        tmp1['mm_loop'] = line['mm_loop']
-        signal_conserved.append(tmp1[['hs_loop', 'mm_loop']].values.tolist())
-    if tmp2.shape[0] > 0:
-        tmp2['mm_loop'] = line['mm_loop']
-        signal_conserved.append(tmp2[['hs_loop', 'mm_loop']].values.tolist())
-
-print('conserved % of lifted loops: ', len(signal_conserved) * 100 / mm_loop_cons.index.unique().shape[0])
 

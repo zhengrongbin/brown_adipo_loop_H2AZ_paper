@@ -84,19 +84,13 @@ The script can be run on a normal computer with enough RAM. However, we recommen
 <li>exp_analysis_02292024.py</li>
 <p>The python script for RNA-seq data downstream analysis using the outputs from proprocessing steps</p>
 
-<li>PROseq_and_eRNA_analysis_2025.py</li>
+<li>PROseq_analysis_2025.py</li>
 <p>The python script for PRO-seq data downstream analysis using the outputs from proprocessing steps. The PRO-seq data was preprocessed by core facility using their pipeline at (https://github.com/AdelmanLab/NIH_scripts)</p>
 <li>Noted that all python scripts above were run in jupyter notebooks. If reproduce our analysis using these script, it is highly recommended to excute it block-by-block using jupyter notebook following comments annonated in the file. The file path in the script remains change to the new folder structure. </li>
 
 ### Supporting python, R, or bash script for Downstream analysis
 <li>replicateCorrelation.sh</li>
 <p>A bash script to compute correlations between Micro-C replicates using hicrep software taking COOL files as input.</p>
-
-<li>homer_eRNA_call.sh</li>
-<p>A bash script to call eRNA peaks on PRO-seq data, bedgraph file of 5' signal was used as input.</p>
-
-<li>adaliftover_run2.R</li>
-<p>A R script to lift over mouse loop anchor into human genome using AdaLiftOver software by considering both epigenomics and sequence similarity.</p>
 
 <li>download_human_snp_LD.py</li>
 <p>A python script to download LD associations for SNPs using LDlink API</p>
