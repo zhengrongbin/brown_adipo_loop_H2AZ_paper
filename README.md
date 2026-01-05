@@ -92,6 +92,12 @@ The script can be run on a normal computer with enough RAM. However, we recommen
 <li>replicateCorrelation.sh</li>
 <p>A bash script to compute correlations between Micro-C replicates using hicrep software taking COOL files as input.</p>
 
+<li>homer_eRNA_peak_call.sh</li>
+<p>A bash script to call eRNA peaks on PRO-seq data, bedgraph file of 5' signal was used as input.</p>
+
+<li>adaliftover_run2.R</li>
+<p>A R script to lift over mouse loop anchor into human genome using AdaLiftOver software by considering both epigenomics and sequence similarity.</p>
+
 <li>download_human_snp_LD.py</li>
 <p>A python script to download LD associations for SNPs using LDlink API</p>
 
