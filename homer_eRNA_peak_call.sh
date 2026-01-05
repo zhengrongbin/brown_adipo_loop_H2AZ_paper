@@ -1,10 +1,74 @@
-#sample=NTplusCL
-#strand=forward
+## NTplusCL, replicate a sample, forward
+sample=NTplusCL
+strand=forward 
+rep=a
+ID=1600
 
-sample=$1
-strand=$2
-rep=$3
-ID=$4
+# ### NTplusCL, replicate a sample, reverse
+# sample=NTplusCL
+# strand=reverse 
+# rep=a 
+# ID=1600
+
+# ### NTplusCL, replicate b sample, forward
+# sample=NTplusCL
+# strand=forward 
+# rep=b
+# ID=1603
+
+# ### NTplusCL, replicate b sample, reverse
+# sample=NTplusCL
+# strand=reverse 
+# rep=b 
+# ID=1603
+
+# ### KD_plusCL, replicate a sample, forward
+# sample=KDplusCL
+# strand=forward 
+# rep=a
+# ID=1601
+
+# ### KD_plusCL, replicate a sample, reverse
+# sample=KDplusCL
+# strand=reverse 
+# rep=a 
+# ID=1601
+
+# ### KD_plusCL, replicate b sample, forward
+# sample=KDplusCL
+# strand=forward 
+# rep=b
+# ID=1604
+
+# ### KD_plusCL, replicate b sample, reverse
+# sample=KDplusCL
+# strand=reverse 
+# rep=b 
+# ID=1604
+
+# ### NTminusCL, replicate a sample, forward
+# sample=NTminusCL
+# strand=forward 
+# rep=a
+# ID=1599
+
+# ### NTminusCL, replicate a sample, reverse
+# sample=NTminusCL
+# strand=reverse 
+# rep=a 
+# ID=1599
+
+# ### NTminusCL, replicate b sample, forward
+# sample=NTminusCL
+# strand=forward 
+# rep=b
+# ID=1602
+
+# ### NTminusCL, replicate b sample, reverse
+# sample=NTminusCL
+# strand=reverse 
+# rep=b 
+# ID=1602
 
 source /lab-share/Cardio-Chen-e2/Public/rongbinzheng/anaconda3/bin/activate
 
