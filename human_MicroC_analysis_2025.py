@@ -1819,4 +1819,99 @@ for i, line in lifted_loops.iterrows():
         tmp2['mm_loop'] = line['mm_loop']
         signal_conserved.append(tmp2[['hs_loop', 'mm_loop']].values.tolist())
 
-print('conserved % of lifted loops: ', len(signal_conserved) * 100 / mm_loop_cons.index.unique().shape[0])
+out = open('seq_conservation_data_v2.pk', 'wb')
+pk.dump({'hg38_lifted_loops': lifted_loops, 'mouse_loops': mm_loop, 'conserved': signal_conserved,
+        'gap': gap, 'lift_term': lift_term, 'lift_cut': lift_cut}, out)
+out.close()
+
+
+## prepare supp table for conserved loop
+
+## AdaLiftOver conservation analysis
+lift_term='score'
+lift_cut = 0.3
+
+with open('conservation_data_v2.pk', 'rb') as f:
+    pk_dat = pk.load(f)
+
+pk_dat['hg38_lifted_loops']['lifted_hs_cord'] = pk_dat['hg38_lifted_loops'].iloc[:,0:6].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1).tolist()
+
+conserved_loop_df = []
+for x in pk_dat['conserved']:
+    conserved_loop_df.extend(x)
+conserved_loop_df = pd.DataFrame(conserved_loop_df, columns = ['hs_loop', 'mm_loop'])
+
+
+tmp = pk_dat['mouse_loops'].sort_values('lifted', ascending = False).drop(['r1', 'r2'], axis = 1)
+tmp.columns=['mm_chrom1', 'mm_start1', 'mm_end1', 'mm_chrom2', 'mm_start2', 'mm_end2', 'liftover']
+tmp = tmp.merge(pk_dat['hg38_lifted_loops'][['mm_loop', 'lifted_hs_cord']], 
+          left_index = True, right_on = 'mm_loop', how = 'left').merge(conserved_loop_df,
+                                                                      left_on = 'mm_loop', 
+                                                                      right_on = 'mm_loop', how = 'left')
+
+## some liftover to different chromosome need to include in the table for showing
+hs_cord_dict = {}
+tmp_set = mm_to_hg38_set[mm_to_hg38_set[lift_term] > lift_cut]
+
+for mm_loop in tmp.loc[pd.isna(tmp['lifted_hs_cord'])].query('liftover == True')['mm_loop'].unique().tolist():
+    line = pk_dat['mouse_loops'].loc[mm_loop]
+    r1, r2 = line['r1'], line['r2']
+    r1_set = tmp_set[tmp_set['mm_anchor'] == r1].iloc[0,0:3].tolist()
+    r2_set = tmp_set[tmp_set['mm_anchor'] == r2].iloc[0,0:3].tolist()
+    hs_cord_dict[mm_loop] = '-'.join([str(int(x)) if 'chr' not in str(x) else x for x in r1_set+r2_set])
+tmp['lifted_hs_cord'] = [hs_cord_dict.get(i, j) for i, j in tmp[['mm_loop', 'lifted_hs_cord']].values.tolist()]
+
+## match loop prob
+tmp = tmp.merge(loop_dots[['prob_shNT_plusFSK', 'score_shNT_plusFSK', 'prob_shNT_minusFSK',
+       'score_shNT_minusFSK', 'prob_KD_plusFSK', 'score_KD_plusFSK', 'label']], 
+                left_on = 'hs_loop', right_on = 'label', how = 'left').drop('label', axis = 1)
+
+## find gene and expression change FSK vs Ctnrol
+tmp_EP, tmp_PP, tmp_PO, tmp_OO = _define_EP_PP_(loop_dots[loop_dots['label'].isin(tmp['hs_loop'].dropna())], comp = 'NT_plusFSK_vs_minusFSK')
+tmp_df = pd.concat([tmp_EP, tmp_PP, tmp_PO, tmp_OO])
+tmp_df['hs_Type'] = ['EP']*tmp_EP.shape[0] + ['PP']*tmp_PP.shape[0] + ['PO']*tmp_PO.shape[0] + ['Other']*tmp_OO.shape[0]
+
+## label loop change FC
+tmp_df['loop_log2FC_FSK_vs_Cntrl'] = tmp_df.apply(lambda row: np.log2(row['prob_shNT_plusFSK'])-np.log2(np.clip(row['prob_shNT_minusFSK'], a_min=0.0001, a_max = 1)), axis = 1)
+tmp_df['loop_log2FC_KD_vs_Cntrl'] = tmp_df.apply(lambda row: np.log2(row['prob_KD_plusFSK'])-np.log2(np.clip(row['prob_shNT_plusFSK'], a_min=0.0001, a_max = 1)), axis = 1)
+
+## rename
+tmp_df = tmp_df[['label', 'loop_log2FC_FSK_vs_Cntrl', 'loop_log2FC_KD_vs_Cntrl', 'hs_Type', 'r1_gene', 'r2_gene']]
+
+tmp = tmp.merge(tmp_df, left_on = 'hs_loop', right_on = 'label', how = 'left').drop('label', axis = 1)
+tmp = tmp.sort_values('loop_log2FC_FSK_vs_Cntrl').sort_values('hs_loop')
+
+## check percentage of conserved loop
+print('% of liftover mouse loop conserved with human loop')
+tmp[~pd.isna(tmp['hs_loop'])]['mm_loop'].unique().shape[0] * 100 / tmp[~pd.isna(tmp['lifted_hs_cord'])]['mm_loop'].unique().shape[0]
+
+## prepare table
+hs_col = ['prob_shNT_plusFSK', 'score_shNT_plusFSK', 'prob_shNT_minusFSK',
+       'score_shNT_minusFSK', 'prob_KD_plusFSK', 'score_KD_plusFSK',
+       'loop_log2FC_FSK_vs_Cntrl', 'loop_log2FC_KD_vs_Cntrl', 
+       'r1_gene', 'r2_gene', 'r1_gene_log2FC_FSK_vs_Cntrl',
+       'r2_gene_log2FC_FSK_vs_Cntrl', 'r1_gene_log2FC_KD_vs_Cntrl',
+       'r2_gene_log2FC_KD_vs_Cntrl', 'gene',
+       'log2FoldChange_plusFSK_vs_minusFSK', 'padj_plusFSK_vs_minusFSK',
+       'log2FoldChange_KD_vs_NT_plusFSK', 'padj_KD_vs_NT_plusFSK']
+tmp.columns = ['hs_'+x if x in hs_col else x for x in tmp.columns.tolist()]
+
+## mouse loop
+mm_union_loop_comb = pd.concat([mm_EP_loop, mm_PP_loop, mm_PO_loop, mm_OO_loop])
+mm_union_loop_comb['loop_type'] = ['EP']*mm_EP_loop.shape[0]+['PP']*mm_PP_loop.shape[0]+['PO']*mm_PO_loop.shape[0]+['OO']*mm_OO_loop.shape[0]
+
+mm_union_loop_comb = mm_union_loop_comb[['prob_shNT_plusCL', 'score_shNT_plusCL', 'prob_shNT_minusCL',
+       'score_shNT_minusCL', 'prob_KD_plusCL', 'score_KD_plusCL', 'r1_gene', 'r2_gene', 'Type', 'loop_type']]
+mm_union_loop_comb.columns = 'mm_'+mm_union_loop_comb.columns
+
+## combine mouse info to human loop table
+mm_union_loop_comb_all = pd.merge(tmp, mm_union_loop_comb, left_on = 'mm_loop', right_index = True, how = 'left')
+
+### to supp table
+with pd.ExcelWriter('mouse_loop_human_conservation_supp_table.xlsx') as writer:
+    tmp = mm_union_loop_comb_all[['mm_loop', 'mm_r1_gene', 'mm_r2_gene', 'liftover', 'lifted_hs_cord', 'hs_loop', 'hs_r1_gene', 'hs_r2_gene']]
+    tmp.to_excel(writer, index = None)
+    
+
+
+

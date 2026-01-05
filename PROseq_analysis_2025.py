@@ -499,3 +499,39 @@ union_erna_level_norm_df = pd.DataFrame(
 ).T
 union_erna_level_norm_df.to_csv('./erna_deseq_normed_log2_rep_average_table.csv')
 
+
+## compare eRNA activity in loop set of interest
+## load mouse loop set
+out = open('../MicroC/loop_set.pk', 'rb')
+d = pk.load(out)
+out.close()
+
+## H2AZ dependent E-P loop in mouse
+CL_induce_KD_down_EP=d['CL_induce_KD_down_EP']
+## enhancer anchor
+EP_enhancer = CL_induce_KD_down_EP.query('r1_ELS == True and r1_K27ac == True').iloc[:,:3].values.tolist()+CL_induce_KD_down_EP.query('r2_ELS == True and r2_K27ac == True').iloc[:,3:6].values.tolist()
+EP_enhancer = pd.DataFrame(EP_enhancer)
+EP_enhancer_bed = pybedtools.BedTool.from_dataframe(EP_enhancer)
+
+overlap_enhancer_bed = pybedtools.BedTool.from_dataframe(union_erna).intersect(EP_enhancer_bed, wa = True)
+overlap_enhancer = overlap_enhancer_bed.to_dataframe().drop_duplicates()
+
+pdf = PdfPages('eRNA_in_loopanchor_comparison.pdf')
+y = 'stat'
+plot_df = pd.DataFrame(index = overlap_enhancer['name'], columns = ['plus_vs_minus', 'KD_vs_NT'])
+
+plot_df['plus_vs_minus'] = res_plus_vs_minus_df.loc[overlap_enhancer['name'], y]
+plot_df['KD_vs_NT'] = res_KD_vs_NT_df.loc[overlap_enhancer['name'], y]
+
+plot_df = plot_df.stack().reset_index()
+plot_df.columns = ['name', 'comp', y]
+fig, ax = plt.subplots(figsize = (3, 3.5))
+sns.boxplot(data = plot_df, x = 'comp', y = y, showfliers = False, width = .7, 
+            palette={'plus_vs_minus': plt.cm.get_cmap('tab10')(1),
+                    'KD_vs_NT': plt.cm.get_cmap('tab10')(0)})
+sns.despine()
+ax.set(xlabel = '')
+plt.tight_layout()
+pdf.savefig(fig)
+plt.show()
+pdf.close()
