@@ -1719,3 +1719,104 @@ plt.tight_layout()
 fig.savefig('GWAS_res_updated_enrichment_fisher_bg_use_nontraitsnp_barplot.pdf')
 plt.show()
 
+
+
+# ### conservation analysis between mouse loop and human loop
+# 
+
+# In[ ]:
+
+
+## load mouse loop sets
+## different mouse loop type
+mm_EP_loop = pd.read_csv('../mouse_EP_df.csv', index_col = 0)
+mm_PP_loop = pd.read_csv('../mouse_PP_df.csv', index_col = 0)
+mm_PO_loop = pd.read_csv('../mouse_PO_df.csv', index_col = 0)
+mm_OO_loop = pd.read_csv('../mouse_OO_df.csv', index_col = 0)
+
+## union loops
+mm_loop_pk = pk.load(open('../../MicroC/loop_set.pk', 'rb'))
+mm_union_loop = mm_loop_pk['union_loops']
+mm_union_loop['r1'] = mm_union_loop.iloc[:,0:3].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
+mm_union_loop['r2'] = mm_union_loop.iloc[:,3:6].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
+mm_union_loop.to_csv('union_loop_set_anchors.bed', sep = '\t', index = None, header = None)
+
+## ---- run adaliftover for mouse loop to find human genomic locatons by considering both sequence and epigenomics
+#### bash: Rscript adaliftover_run2.R union_loop_set_anchors.bed
+### this will generate a file named mm_union_loop_adliftover_to_hg38.txt
+
+## load mouse adaliftover to hg38
+mm_to_hg38_set = pd.read_csv('../adaliftover/mm_union_loop_adliftover_to_hg38.txt', sep = '\t', header = None)
+mm_to_hg38_set.columns = ['seqnames','start','end','width','strand','epigenome','grammar','score', 'mm_anchor']
+
+
+# In[ ]:
+
+
+## loop conservation comparison by comparing liftover human loop location with real human loop sets
+lift_term = 'score'
+lift_cut = 0.3
+gap = 20000
+resolution = 5000
+
+mm_loop = mm_union_loop.iloc[:,0:6].copy()
+
+mm_loop['r1'] = mm_loop.iloc[:,0:3].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
+mm_loop['r2'] = mm_loop.iloc[:,3:6].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
+
+## compare
+tmp_set = mm_to_hg38_set[mm_to_hg38_set[lift_term] > lift_cut]
+mm_loop['lifted'] = mm_loop['r1'].isin(tmp_set['mm_anchor']) & mm_loop['r2'].isin(tmp_set['mm_anchor'])
+
+## focus on lifted loops
+mm_loop_cons = mm_loop.query('lifted == True')
+## defined lifted human loop sites
+lifted_loops = []
+for i, line in mm_loop_cons.iterrows():
+    r1, r2 = line['r1'], line['r2']
+    r1_set = tmp_set[tmp_set['mm_anchor'] == r1].iloc[0,0:3].tolist()
+    r2_set = tmp_set[tmp_set['mm_anchor'] == r2].iloc[0,0:3].tolist()
+    lifted_loops.append(r1_set+r2_set+[i])
+lifted_loops = pd.DataFrame(lifted_loops, columns = ['chrom1', 'start1', 'end1', 'chrom2', 'start2', 'end2', 'mm_loop'])
+
+## get rid of lifted to different chromosome
+lifted_loops = lifted_loops.query('chrom1 == chrom2')
+lifted_loops['start1'] = lifted_loops['start1'].astype('int')
+lifted_loops['start2'] = lifted_loops['start2'].astype('int')
+lifted_loops['end1'] = lifted_loops['end1'].astype('int')
+lifted_loops['end2'] = lifted_loops['end2'].astype('int')
+lifted_loops = lifted_loops.sort_values(['chrom1', 'start1'])
+lifted_loops['r1_center'] = lifted_loops['start1']+int(1/resolution)
+lifted_loops['r2_center'] = lifted_loops['start2']+int(1/resolution)
+
+## human loop set
+hs_loop = loop_dots_need.iloc[:,0:6].copy()
+hs_loop['hs_loop'] = loop_dots_need['label'].tolist()
+hs_loop['r1'] = hs_loop.iloc[:,0:3].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
+hs_loop['r2'] = hs_loop.iloc[:,3:6].apply(lambda row: '-'.join(row.astype('str').tolist()), axis = 1)
+
+hs_loop['r1_center'] = hs_loop['start1']+int(1/resolution)
+hs_loop['r2_center'] = hs_loop['start2']+int(1/resolution)
+
+## 
+signal_conserved = []
+for i, line in lifted_loops.iterrows():
+    chrom, r1_center, r2_center = line[['chrom1', 'r1_center', 'r2_center']]
+    tmp1 = hs_loop[(hs_loop['chrom1'] == chrom) & 
+                (hs_loop['start1']-gap+(0.5*resolution) < r1_center) & 
+                (hs_loop['end1']+gap-(0.5*resolution) > r1_center) &
+                (hs_loop['start2']-gap+(0.5*resolution) < r2_center) & 
+                (hs_loop['end2']+gap-(0.5*resolution) > r2_center)]
+    tmp2 = hs_loop[(hs_loop['chrom1'] == chrom) & 
+                (hs_loop['start1']-gap+(0.5*resolution) < r2_center) & 
+                (hs_loop['end1']+gap-(0.5*resolution) > r2_center) &
+                (hs_loop['start2']-gap+(0.5*resolution) < r1_center) & 
+                (hs_loop['end2']+gap-(0.5*resolution) > r1_center)]
+    if tmp1.shape[0] > 0:
+        tmp1['mm_loop'] = line['mm_loop']
+        signal_conserved.append(tmp1[['hs_loop', 'mm_loop']].values.tolist())
+    if tmp2.shape[0] > 0:
+        tmp2['mm_loop'] = line['mm_loop']
+        signal_conserved.append(tmp2[['hs_loop', 'mm_loop']].values.tolist())
+
+print('conserved % of lifted loops: ', len(signal_conserved) * 100 / mm_loop_cons.index.unique().shape[0])
