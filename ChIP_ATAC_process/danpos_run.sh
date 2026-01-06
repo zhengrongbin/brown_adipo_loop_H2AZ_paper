@@ -3,6 +3,7 @@
 bam=$1 ## path for chip bam file
 Igg=$2 ## path for IgG bam file
 label=$3 ## label for this sample
+size=$4 ## the size of extend, can be determined by checking fragment size distribution
 
 source /programs/biogrids.shrc
 echo "++++sort and uniq bam"
@@ -21,7 +22,7 @@ fi
 export SAMTOOLS_X=0.1.19
 
 echo "++++Danpos to call peaks"
-python.danpos2 /programs/x86_64-linux/danpos2/2.2.2/danpos.py dpeak ${bam}.dedup.bam -b ${dedup_Igg} --smooth_width 0 -o $label -c 25000000 --frsz 150 --extend 150
+python.danpos2 /programs/x86_64-linux/danpos2/2.2.2/danpos.py dpeak ${bam}.dedup.bam -b ${dedup_Igg} --smooth_width 0 -o $label -c 25000000 --frsz $size --extend $size
 
 echo "++++get bw"
 bam=`basename $bam`
