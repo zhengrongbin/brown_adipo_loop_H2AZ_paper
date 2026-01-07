@@ -3576,3 +3576,177 @@ plt.tight_layout()
 fig.savefig('H2AZ_invivo_signal_H2AZoccu_loop.pdf')
 plt.show()
 plt.close()
+
+
+## ATAC-seq signal at E-P loops with H2AZ binding and up-regulation by CL
+tab_res = pd.read_csv('../MicroC/plusCL_vs_minusCL_loop_target_gene_diffexp.tsv', sep = '\t')
+up_go_ep_loop = tab_res.query('log2FoldChange > 0.58 and padj < 0.05 and diff_loop == "Up"')[['loop', 'loop_type']].drop_duplicates()
+up_go_ep_loop['anchor1'] = ['-'.join(x.split('-')[:3]) for x in up_go_ep_loop['loop'].tolist()]
+up_go_ep_loop['anchor2'] = ['-'.join(x.split('-')[3:6]) for x in up_go_ep_loop['loop'].tolist()]
+anchor1 = pd.DataFrame([x.split('-')[:3] for x in up_go_ep_loop['loop'].tolist()])
+anchor2 = pd.DataFrame([x.split('-')[3:6] for x in up_go_ep_loop['loop'].tolist()])
+anchor1_bed = pybedtools.BedTool.from_dataframe(anchor1)
+anchor2_bed = pybedtools.BedTool.from_dataframe(anchor2)
+
+anchor1_h2az = anchor1_bed.intersect(H2AZ_plusCL_reprod_peaks_bed, wa = True).to_dataframe().drop_duplicates()
+anchor1_h2az['label'] = anchor1_h2az.apply(lambda row: row['chrom']+'-'+str(row['start'])+'-'+str(row['end']), axis = 1)
+anchor2_h2az = anchor2_bed.intersect(H2AZ_plusCL_reprod_peaks_bed, wa = True).to_dataframe().drop_duplicates()
+anchor2_h2az['label'] = anchor2_h2az.apply(lambda row: row['chrom']+'-'+str(row['start'])+'-'+str(row['end']), axis = 1)
+
+anchor1_atac = anchor1_bed.intersect(ATAC_peaks_reprod_bed['shNT_plusCL'], wa = True).to_dataframe().drop_duplicates()
+anchor1_atac['label'] = anchor1_atac.apply(lambda row: row['chrom']+'-'+str(row['start'])+'-'+str(row['end']), axis = 1)
+anchor2_atac = anchor2_bed.intersect(ATAC_peaks_reprod_bed['shNT_plusCL'], wa = True).to_dataframe().drop_duplicates()
+anchor2_atac['label'] = anchor2_atac.apply(lambda row: row['chrom']+'-'+str(row['start'])+'-'+str(row['end']), axis = 1)
+
+up_go_ep_loop['anchor1_h2az'] = up_go_ep_loop['anchor1'].isin(anchor1_h2az['label'])
+up_go_ep_loop['anchor2_h2az'] = up_go_ep_loop['anchor2'].isin(anchor2_h2az['label'])
+up_go_ep_loop['anchor1_atac'] = up_go_ep_loop['anchor1'].isin(anchor1_atac['label'])
+up_go_ep_loop['anchor2_atac'] = up_go_ep_loop['anchor2'].isin(anchor2_atac['label'])
+
+tmp_loops = up_go_ep_loop.query('loop_type == "E-P"').query('(anchor1_atac == True or anchor2_atac == True) and (anchor1_h2az == True or anchor2_h2az == True)')['loop'].unique()
+tmp_loop_anchors = []
+for x in tmp_loops.tolist():
+    tmp_loop_anchors.append(x.split('-')[:3])
+    tmp_loop_anchors.append(x.split('-')[3:6])
+tmp_loop_anchors = pd.DataFrame(tmp_loop_anchors).drop_duplicates()
+tmp_loop_anchor_atac = ATAC_peaks_reprod_bed['shNT_plusCL'].intersect(pybedtools.BedTool.from_dataframe(tmp_loop_anchors), wa = True).to_dataframe().drop_duplicates()
+
+d = 2000
+bw_ATAC_site_values = []
+for path in ATAC_bw:
+    bw = pyBigWig.open(ATAC_bw[path])
+    for i, line in tmp_loop_anchor_atac.iterrows():
+        c = line['start'] + int(abs((line['start']-line['end'])/2))
+        line['bw'] = bw.values(line['chrom'], c-d, c+d)
+        bw_ATAC_site_values.append(line.values.tolist()+[path, line['chrom']+':'+str(c)])
+## 1k window
+plot_df = pd.DataFrame([[np.mean(x[8][1500:2500]) for x in bw_ATAC_site_values],
+              [x[-2] for x in bw_ATAC_site_values],
+              [x[-1] for x in bw_ATAC_site_values]], index = ['values', 'sample', 'peak']).T
+plot_df['cond'] = [x.split('_rep')[0] for x in plot_df['sample'].tolist()]
+
+## remove those weak peaks in all three conditions
+tmp_array = plot_df.groupby('peak').apply(lambda df: np.all(df['values'] < 2)).sort_values()
+tmp_array = tmp_array[tmp_array == False].index.tolist()
+plot_df = plot_df[plot_df['peak'].isin(tmp_array)]
+## average signal of replicates by condition and peaks
+plot_df = plot_df.drop(['sample'], axis = 1).groupby(['cond', 'peak']).mean().reset_index()
+
+fig, ax = plt.subplots(figsize = (4,4))
+sns.boxplot(data = plot_df, x = 'cond', y = 'values', showfliers = False,
+           order = ['shNT_minusCL', 'shNT_plusCL', 'KD_plusCL'],
+           palette = {'shNT_minusCL':'grey', 'shNT_plusCL': plt.cm.get_cmap('tab10')(1), 'KD_plusCL': plt.cm.get_cmap('tab10')(0)})
+ax.tick_params(axis = 'x', rotation = 90)
+ax.set(ylabel = 'ATAC-seq signal', title = '1kb', xlabel = '')
+sns.despine()
+plt.show()
+plt.close()
+
+print('plus vs minus: ', wilcoxon(plot_df.query('cond == "shNT_plusCL"')['values'].tolist(), plot_df.query('cond == "shNT_minusCL"')['values'].tolist()))
+
+print('KD vs Ctrl: ', wilcoxon(plot_df.query('cond == "shNT_plusCL"')['values'].tolist(), plot_df.query('cond == "KD_plusCL"')['values'].tolist()))
+
+
+## CTCF and SMC1 binding rate in different loop sets
+def _overlap_rate_(bed, loops, title = '', xlabel='', plot = False, both_either = True):
+    rates1 = {}
+    rates2 = {}
+    if isinstance(loops, dict):
+        both_loop = pd.DataFrame()
+        one_loop = pd.DataFrame()
+        for t in loops:
+            loops_tmp = loops[t].iloc[:,:6].drop_duplicates()
+            loops_tmp.columns = ['chrom1', 'start1', 'end1', 'chrom2', 'start2', 'end2']
+            loops_tmp['anchor1'] = loops_tmp.iloc[:,:3].apply(lambda row: '-'.join([str(x) for x in row.tolist()]), axis = 1)
+            loops_tmp['anchor2'] = loops_tmp.iloc[:,3:6].apply(lambda row: '-'.join([str(x) for x in row.tolist()]), axis = 1)
+            onames1 = pybedtools.BedTool.from_dataframe(loops_tmp[['chrom1', 'start1', 'end1', 'anchor1']]).intersect(bed, wa = True).to_dataframe()['name']
+            onames2 = pybedtools.BedTool.from_dataframe(loops_tmp[['chrom2', 'start2', 'end2', 'anchor2']]).intersect(bed, wa = True).to_dataframe()['name']
+
+            both_loop_tmp = loops_tmp[loops_tmp['anchor2'].isin(onames2) & loops_tmp['anchor1'].isin(onames1)]
+            rate = both_loop_tmp.shape[0]/loops_tmp.shape[0]
+            rates1[t] = round(rate*100, 2)
+            both_loop = both_loop.concat(both_loop_tmp)
+
+            one_loop_tmp = loops_tmp[(loops_tmp['anchor2'].isin(onames2) & ~loops_tmp['anchor1'].isin(onames1)) |
+                        (~loops_tmp['anchor2'].isin(onames2) & loops_tmp['anchor1'].isin(onames1))]
+            rate = one_loop_tmp.shape[0]/loops_tmp.shape[0]
+            rates2[t] = round(rate*100, 2)
+            one_loop = one_loop.concat(one_loop_tmp)
+        print('both_number', both_loop.shape[0])
+        print('one_number', one_loop.shape[0])
+    else:
+        t = 'loops'
+        loops_tmp = loops.iloc[:,:6].drop_duplicates()
+        loops_tmp.columns = ['chrom1', 'start1', 'end1', 'chrom2', 'start2', 'end2']
+        loops_tmp['anchor1'] = loops_tmp.iloc[:,:3].apply(lambda row: '-'.join([str(x) for x in row.tolist()]), axis = 1)
+        loops_tmp['anchor2'] = loops_tmp.iloc[:,3:6].apply(lambda row: '-'.join([str(x) for x in row.tolist()]), axis = 1)
+        onames1 = pybedtools.BedTool.from_dataframe(loops_tmp[['chrom1', 'start1', 'end1', 'anchor1']]).intersect(bed, wa = True).to_dataframe()['name']
+        onames2 = pybedtools.BedTool.from_dataframe(loops_tmp[['chrom2', 'start2', 'end2', 'anchor2']]).intersect(bed, wa = True).to_dataframe()['name']
+
+        both_loop = loops_tmp[loops_tmp['anchor2'].isin(onames2) & loops_tmp['anchor1'].isin(onames1)]
+        rate = both_loop.shape[0]/loops_tmp.shape[0]
+        print('both_number', both_loop.shape[0])
+        rates1[t] = round(rate*100, 2) ## both anchor
+        
+        one_loop = loops_tmp[(loops_tmp['anchor2'].isin(onames2) & ~loops_tmp['anchor1'].isin(onames1)) |
+                        (~loops_tmp['anchor2'].isin(onames2) & loops_tmp['anchor1'].isin(onames1))]
+        rate = one_loop.shape[0]/loops_tmp.shape[0]
+        rates2[t] = round(rate*100, 2) ## one anchor
+        print('one_number', one_loop.shape[0])
+
+    rate = {'both_anchor': rates1, 'one_anchor': rates2}
+    print(rate)
+    if plot:
+        df = pd.DataFrame(rate).unstack().reset_index()
+        df.columns = ['Bind', 'LoopType', 'Rate']
+        if both_either:
+            fig, ax = plt.subplots(figsize = (5,3))
+            sns.barplot(data = df, x = 'LoopType', y = 'Rate', hue = 'Bind')
+            for p in ax.patches[:-2]:
+                # print(p.get_x(), p)
+                height = p.get_height()  # Get the height of each bar (the value)
+                ax.text(p.get_x() + p.get_width() / 2, height + .5, f'{height:.1f}', ha='center', va='bottom', fontsize=10)
+            ax.set(xlabel=xlabel, ylabel = '% of loops')
+            ax.set_title(label = title, pad = 15)
+            ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            sns.despine()
+            plt.tight_layout()
+            plt.show()
+            plt.close()
+        else:
+            df = df.groupby('Bind')['Rate'].sum().reset_index()
+            fig, ax = plt.subplots(figsize = (4,3))
+            sns.barplot(data = df, x = 'LoopType', y = 'Rate')
+            for p in ax.patches:
+                # print(p.get_x(), p)
+                height = p.get_height()  # Get the height of each bar (the value)
+                ax.text(p.get_x() + p.get_width() / 2, height + .5, f'{height:.1f}', ha='center', va='bottom', fontsize=10)
+            ax.set(xlabel=xlabel, ylabel = '% of loops')
+            ax.set_title(label = title, pad = 15)
+            sns.despine()
+            plt.tight_layout()
+            plt.show()
+            plt.close()
+    return({'both': both_loop, 'one': one_loop})
+
+## CTCF SMC1 copeaks defines cohensin complex
+CTCF_SMC1_peaks_plusCL_shNT_bed = SMC1_peaks_plusCL_shNT_bed.intersect(CTCF_peaks_plusCL_shNT_bed, wa = True)
+CTCF_SMC1_peaks_minusCL_shNT_bed = SMC1_peaks_minusCL_shNT_bed.intersect(CTCF_peaks_minusCL_shNT_bed, wa = True)
+CTCF_SMC1_peaks_plusCL_minus_union_bed = pybedtools.BedTool.from_dataframe(pd.DataFrame(
+    CTCF_SMC1_peaks_plusCL_shNT_bed.to_dataframe().values.tolist()+CTCF_SMC1_peaks_minusCL_shNT_bed.to_dataframe().values.tolist()
+))
+
+## CTCF_SMC1 binding rate in no changed loops
+CTCF_SMC1_stable_loop = _overlap_rate_(CTCF_SMC1_peaks_plusCL_minus_union_bed, stable_loop_union,
+                      plot = True, title = 'CTCF_SMC1 in No change loops', both_either=True)
+
+## SMC1 binding rate in no changed loops
+rate = _overlap_rate_(SMC1_peaks_plusCL_shNT_bed, stable_loop_union.iloc[:,:6].drop_duplicates(),
+                      plot = True, title = 'SMC1 in No change loops', both_either=True)
+
+## CTCF_SMC1 binding rate in CL up loops
+CTCF_SMC1_up_loop = _overlap_rate_(CTCF_SMC1_peaks_plusCL_shNT_bed, up_loop, plot = True, title = 'CTCF_SMC1 in up loops', both_either=True)
+
+## SMC1 binding rate in CL up loops
+rate = _overlap_rate_(SMC1_peaks_plusCL_shNT_bed, up_loop, plot = True, title = 'SMC1 in up loops', both_either=True)
+
