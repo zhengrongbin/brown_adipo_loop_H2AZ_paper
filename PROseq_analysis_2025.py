@@ -115,6 +115,7 @@ plt.close()
 
 
 
+
  ### eRNA analysis
 
 # In[ ]:
@@ -535,3 +536,56 @@ plt.tight_layout()
 pdf.savefig(fig)
 plt.show()
 pdf.close()
+
+### GSEA analysis
+## load PRO-seq differential gene expression result
+pro_diffexp = {}
+
+plus_KD_vs_NT_de = pd.read_csv('../DataProcess/PROseq_102024/HMD_Core/differential_expression/KDplus.vs.NTplus/Tseng001_deseq_KDplus.vs.NTplus_results_table.txt',
+                              sep = '\t')
+
+tmp = plus_KD_vs_NT_de[['symbol', 'log2FoldChange_KDplus.vs.NTplus', 'padj_KDplus.vs.NTplus', 'stat_KDplus.vs.NTplus']]
+tmp.columns = ['gene', 'log2FoldChange', 'padj', 'stat']
+tmp['padj'] = tmp['padj'].fillna(1)
+tmp['log2FoldChange'] = tmp['log2FoldChange'].fillna(0)
+tmp['log2FoldChange_abs'] = tmp['log2FoldChange'].abs()
+## deduplicate by taking largest abs fold change
+tmp = tmp.sort_values('log2FoldChange_abs', ascending = False)
+tmp = tmp[~tmp['gene'].duplicated()]
+tmp.index = tmp['gene'].tolist()
+pro_diffexp['plusCL_KD_vs_shNT'] = tmp.copy()
+del tmp
+
+plus_vs_minus_de = pd.read_csv('../DataProcess/PROseq_102024/HMD_Core/differential_expression/NTplus.vs.NTminus/Tseng001_deseq_NTplus.vs.NTminus_results_table.txt',
+                              sep = '\t')
+
+tmp = plus_vs_minus_de[['symbol', 'log2FoldChange_NTplus.vs.NTminus', 'padj_NTplus.vs.NTminus', 'stat_NTplus.vs.NTminus']]
+tmp.columns = ['gene', 'log2FoldChange', 'padj', 'stat']
+tmp['padj'] = tmp['padj'].fillna(1)
+tmp['log2FoldChange'] = tmp['log2FoldChange'].fillna(0)
+tmp['log2FoldChange_abs'] = tmp['log2FoldChange'].abs()
+## deduplicate by taking largest abs fold change
+tmp = tmp.sort_values('log2FoldChange_abs', ascending = False)
+tmp = tmp[~tmp['gene'].duplicated()]
+tmp.index = tmp['gene'].tolist()
+pro_diffexp['shNT_plusCL_vs_minusCL'] = tmp.copy()
+del tmp
+
+## rank the genes by stat z-scores in differential analysis
+rnk = pro_diffexp['plusCL_KD_vs_shNT'][['stat']]
+cut = np.log2(1.5)
+cut2 = -np.log2(1.5)
+
+pre_res = gp.prerank(rnk=rnk, # or rnk = rnk,
+                     gene_sets={'PRO_UP': pro_diffexp['shNT_plusCL_vs_minusCL'].query('log2FoldChange > @cut and padj < 0.05').index.tolist(),
+                               'PRO_DOWN': pro_diffexp['shNT_plusCL_vs_minusCL'].query('log2FoldChange < @cut2 and padj < 0.05').index.tolist()},
+                     threads=4,
+                     min_size=5,
+                     max_size=5000,
+                     permutation_num=1000, # reduce number to speed up testing
+                     outdir=None, # don't write to disk
+                     seed=6,
+                     verbose=True, # see what's going on behind the scenes
+                    )
+
+axs = pre_res.plot(terms='PRO_UP', fname = 'pro-seq_gsea_thermo_up_in_H2AZKD.pdf')

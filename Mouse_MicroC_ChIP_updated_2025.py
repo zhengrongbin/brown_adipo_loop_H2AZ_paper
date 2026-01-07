@@ -255,7 +255,7 @@ def quantile_norm(X):
     return Xn
 
 ### function to draw boxplot for gene expression change of up, down, stable loops
-def _plot_loop_exp_(mm10_tss_ann, up_loops, down_loops, stable_loops, de, d = 10000, figsize = (5,5), pdf = False):
+def _plot_loop_exp_(mm10_tss_ann, up_loops, down_loops, stable_loops, de, col='log2FoldChange', d = 10000, figsize = (5,5), pdf = False):
     mm10_promoter = mm10_tss_ann.copy()
     mm10_promoter['start'] = mm10_tss_ann['start'] - d
     mm10_promoter['end'] = mm10_tss_ann['end'] + d
@@ -287,7 +287,7 @@ def _plot_loop_exp_(mm10_tss_ann, up_loops, down_loops, stable_loops, de, d = 10
     plot_df = pd.concat([plot_df1, plot_df2, plot_df3])
     
     fig, ax = plt.subplots(figsize = figsize)
-    col = 'log2FoldChange'
+    # col = 'log2FoldChange'
     sns.boxplot(data = plot_df, x = 'label', y = col, showfliers = False,
                width = .5)
     s1, p1 = ranksums(plot_df.query('label == "Up"')[col], 
@@ -1146,7 +1146,7 @@ exp_tpm = pd.read_csv('tpm_matrix.csv', index_col = 0)
 
 # pdf = PdfPages('Figures/all_loop_mRNA_fc.pdf')
 # plot_df = _plot_loop_exp_(mm10_tss_ann, up_loop_anchor, down_loop_anchor, 
-#                 stable_loop_anchor, diffexp['shNT_plusCL_vs_minusCL'], d = 5000, figsize = (4,4.5),
+#                 stable_loop_anchor, diffexp['shNT_plusCL_vs_minusCL'], col='stat', d = 5000, figsize = (4,4.5),
 #                          pdf = pdf)
 # pdf.close()
 
@@ -1349,6 +1349,33 @@ sns.despine()
 # fig.savefig('Figures/diffloop_vs_mRNA_fc.pdf')
 plt.show()
 
+
+
+pdf = PdfPages('Figures/pie_chart_percentage_diff_category.pdf')
+for x,i in [[EP_df, 'E-P'],
+          [PP_df, 'P-P'], 
+          [PO_df, 'P-Other'], 
+          [OO_df, 'Other-Other']]:
+    ### up vs down
+    n1 = x[x['label'].isin(up_dots['label'])].shape[0]
+    n2 = x[x['label'].isin(down_dots['label'])].shape[0]
+    n3 = x[x['label'].isin(stable_dots['label'])].shape[0]
+
+    fig, ax = plt.subplots()
+    ax.pie([n1, n2, n3], labels=['Up', 'Down', 'No'], autopct='%1.1f%%', 
+           colors=['#CD5555', '#1E90FF', 'lightgrey'])
+    ax.set(title = i)
+    plt.tight_layout()
+    pdf.savefig(fig)
+    plt.show()
+    fig, ax = plt.subplots()
+    ax.pie([n1, n2, n3], labels=['', '', ''], 
+           colors=['#CD5555', '#1E90FF', 'lightgrey'])
+    ax.set(title = i)
+    plt.tight_layout()
+    pdf.savefig(fig)
+#     plt.show()
+pdf.close()
 
 # In[32]:
 
@@ -3216,7 +3243,7 @@ for t, r, l in [['EP', EP_res, CL_induce_KD_down_EP],
             line['bw'] = bw.values(line['chrom'], line['start']-d, line['start']+d)
             ATAC_bw_ATAC_site_values[t].append(line.values.tolist()+[path])
 
-### ATAC-seq signal at H2AZ site in H2AZ occupied loops in three conditions
+### MED1 signal at H2AZ site in H2AZ occupied loops in three conditions
 MED1_bw_ATAC_site_values={}
 for t, r, l in [['EP', EP_res, CL_induce_KD_down_EP],
          ['PP', PP_res, CL_induce_KD_down_PP],
@@ -3291,3 +3318,261 @@ plt.tight_layout()
 plt.show()
 plt.close()
 
+
+## MED1 ChIP signal in H2AZ site in loops
+H2AZ_bind_loop_anchor = pybedtools.BedTool.from_dataframe(
+    pd.DataFrame(H2AZ_bind_loops.iloc[:,:3].values.tolist()+H2AZ_bind_loops.iloc[:,3:6].values.tolist())
+)
+
+med1_peaks_h2az_occu_loop = med1_peaks_plusCL_shNT_bed.intersect(H2AZ_bind_loop_anchor, wa = True).to_dataframe().drop_duplicates()
+med1_peaks_h2az_occu_loop_center = med1_peaks_h2az_occu_loop.copy()
+c = med1_peaks_h2az_occu_loop_center['start']+(med1_peaks_h2az_occu_loop_center['end']-med1_peaks_h2az_occu_loop_center['start']).astype('int')
+med1_peaks_h2az_occu_loop_center['start'] = c
+med1_peaks_h2az_occu_loop_center['end'] = c+1
+
+med1_peaks_h2az_occu_loop.iloc[:,:3].to_csv('med1_peaks_h2az_occu_loop.bed', sep = '\t', header = None, index = None)
+## to generate heatmap using deepTools +- 600bp around peak center, the result in med1_peaks_h2az_occu_loop_MED1_bw.mat file
+bw_mat = pd.read_csv('./med1_peaks_h2az_occu_loop_MED1_bw.mat', sep = '\t', header = None)
+minusCL_r1 = bw_mat.iloc[:,6:(6+600)]
+minusCL_r2 = bw_mat.iloc[:,(6+600):(6+1200)]
+plusCL_r1 = bw_mat.iloc[:,(6+1200):(6+1800)]
+plusCL_r2 = bw_mat.iloc[:,(6+1800):(6+2400)]
+KD_r1 = bw_mat.iloc[:,(6+2400):(6+3000)]
+KD_r2 = bw_mat.iloc[:,(6+3000):]
+
+minusCL_avg = pd.DataFrame((np.array(minusCL_r1) + np.array(minusCL_r2))/2)
+plusCL_avg = pd.DataFrame((np.array(plusCL_r1) + np.array(plusCL_r2))/2)
+## violinplot, 1kb window of MED1 peak center
+plot_df = pd.DataFrame([
+    minusCL_avg.iloc[:, 250:350].T.mean().tolist()+plusCL_avg.iloc[:, 250:350].T.mean().tolist()+KD_avg.iloc[:, 250:350].T.mean().tolist(),
+    ['minusCL']*minusCL_avg.shape[0]+['plusCL']*plusCL_avg.shape[0]+['KD']*KD_avg.shape[0]
+], index = ['value', 'cond']).T
+
+fig, ax = plt.subplots(figsize = (2,2.5))
+sns. boxplot(data = plot_df.query('cond != "KD"'), x = 'cond', y = 'value', showfliers = False, 
+               palette={'minusCL': 'grey', 'plusCL': 'darkorange', 'KD': plt.cm.get_cmap('tab10')(0)}, whis = 0.8)
+# sns.swarmplot(data = plot_df.query('cond != "KD"'), x = 'cond', y = 'value', size = 1,
+#                palette={'minusCL': 'grey', 'plusCL': 'darkorange', 'KD': plt.cm.get_cmap('tab10')(0)})
+ax.set_ylabel('MED1 ChIP-seq Signal', fontsize = 8)
+ax.set_xlabel('')
+sns.despine()
+plt.tight_layout()
+plt.show()
+plt.close()
+
+## plot correlation between replicate computed from hicrep software
+pdf = PdfPages('mouse_microc_hicrep_replicate_heatmap.pdf')
+
+## shNT plusCL
+folder = './MicroC/replicate_reproduce/shNT_plusCL'
+files = [x for x in os.listdir(folder) if x.startswith('rep') and x.endswith('.txt')]
+corr_res = []
+for path in files:
+    if path == 'replicates_hicrep_corr_mat.txt':
+        continue
+    with open(os.path.join(folder, path)) as f:
+        v = [float(x.rstrip().split(' ')[-1]) for x in f.readlines()[2:]]
+        corr_res.append([path.split('_')[0], path.split('_')[1], np.median(v)])
+df = pd.DataFrame(corr_res).pivot_table(index = 0, columns = 1, values = 2).reindex(index = ['rep1', 'rep2', 'rep3', 'rep4'],
+                                                                              columns = ['rep1', 'rep2', 'rep3', 'rep4'])
+## make symatrix
+for x1 in ['rep1', 'rep2', 'rep3', 'rep4']:
+    col = df.loc[:,x1]
+    for x2 in col.index:
+        if pd.isna(col[x2]):
+            if x1 == x2:
+                df.loc[x1, x2] = 1
+            else:
+                df.loc[x2, x1] = df.loc[x1, x2]
+
+## plot heatmap
+fig, ax = plt.subplots(figsize = (4.5,3.5))
+sns.heatmap(df, cmap = 'Reds', vmin = 0, annot = df, fmt = '.4f')
+ax.set(xlabel = '', ylabel = '', title = 'shNT_plusCL')
+plt.tight_layout()
+pdf.savefig(fig)
+plt.close()
+fig, ax = plt.subplots(figsize = (4.5,3.5))
+sns.heatmap(df, cmap = 'Reds', vmin = 0)
+ax.set(xlabel = '', ylabel = '', title = 'shNT_plusCL')
+plt.tight_layout()
+pdf.savefig(fig)
+plt.close()
+
+## shNT plusCL
+folder = './MicroC/replicate_reproduce/shNT_minusCL'
+files = [x for x in os.listdir(folder) if x.startswith('rep') and x.endswith('.txt')]
+corr_res = []
+for path in files:
+    if path == 'replicates_hicrep_corr_mat.txt':
+        continue
+    with open(os.path.join(folder, path)) as f:
+        v = [float(x.rstrip().split(' ')[-1]) for x in f.readlines()[2:]]
+        corr_res.append([path.split('_')[0], path.split('_')[1], np.median(v)])
+df = pd.DataFrame(corr_res).pivot_table(index = 0, columns = 1, values = 2).reindex(index = ['rep1', 'rep2', 'rep3', 'rep4'],
+                                                                              columns = ['rep1', 'rep2', 'rep3', 'rep4'])
+## make symatrix
+for x1 in ['rep1', 'rep2', 'rep3', 'rep4']:
+    col = df.loc[:,x1]
+    for x2 in col.index:
+        if pd.isna(col[x2]):
+            if x1 == x2:
+                df.loc[x1, x2] = 1
+            else:
+                df.loc[x2, x1] = df.loc[x1, x2]
+
+## plot heatmap
+fig, ax = plt.subplots(figsize = (4.5,3.5))
+sns.heatmap(df, cmap = 'Reds', vmin = 0, annot = df, fmt = '.4f')
+ax.set(xlabel = '', ylabel = '', title = 'shNT_minusCL')
+plt.tight_layout()
+pdf.savefig(fig)
+plt.close()
+fig, ax = plt.subplots(figsize = (4.5,3.5))
+sns.heatmap(df, cmap = 'Reds', vmin = 0)
+ax.set(xlabel = '', ylabel = '', title = 'shNT_minusCL')
+plt.tight_layout()
+pdf.savefig(fig)
+plt.close()
+
+## shNT plusCL
+folder = './MicroC/replicate_reproduce/KD_plusCL'
+files = [x for x in os.listdir(folder) if x.startswith('rep') and x.endswith('.txt')]
+corr_res = []
+for path in files:
+    if path == 'replicates_hicrep_corr_mat.txt':
+        continue
+    with open(os.path.join(folder, path)) as f:
+        v = [float(x.rstrip().split(' ')[-1]) for x in f.readlines()[2:]]
+        corr_res.append([path.split('_')[0], path.split('_')[1], np.median(v)])
+df = pd.DataFrame(corr_res).pivot_table(index = 0, columns = 1, values = 2).reindex(index = ['rep1', 'rep2', 'rep3', 'rep4'],
+                                                                              columns = ['rep1', 'rep2', 'rep3', 'rep4'])
+## make symatrix
+for x1 in ['rep1', 'rep2', 'rep3', 'rep4']:
+    col = df.loc[:,x1]
+    for x2 in col.index:
+        if pd.isna(col[x2]):
+            if x1 == x2:
+                df.loc[x1, x2] = 1
+            else:
+                df.loc[x2, x1] = df.loc[x1, x2]
+
+## plot heatmap
+fig, ax = plt.subplots(figsize = (4.5,3.5))
+sns.heatmap(df, cmap = 'Reds', vmin = 0, annot = df, fmt = '.4f')
+ax.set(xlabel = '', ylabel = '', title = 'KD_plusCL')
+plt.tight_layout()
+pdf.savefig(fig)
+plt.close()
+fig, ax = plt.subplots(figsize = (4.5,3.5))
+sns.heatmap(df, cmap = 'Reds', vmin = 0)
+ax.set(xlabel = '', ylabel = '', title = 'KD_plusCL')
+plt.tight_layout()
+pdf.savefig(fig)
+plt.close()
+pdf.close()
+
+
+## diff loop with gene expression change in RNA-seq
+
+## identify H2AZ-dependant loops - CL induce and KD down loops - 2fold change
+tmp = pd.DataFrame(quantile_norm(loop_dots[['score_shNT_plusCL', 'score_shNT_minusCL', 'score_KD_plusCL']].copy()), 
+                   columns = ['score_shNT_plusCL', 'score_shNT_minusCL', 'score_KD_plusCL'], index = loop_dots['label'].tolist())
+
+CL_induce_KD_down = up_dots[up_dots['label'].isin(KD_down_dots['label']) & up_dots['label'].isin(up_loop['label'])]
+CL_induce_KD_down['score_KD_plusCL'] = tmp.loc[CL_induce_KD_down['label'].tolist(), 'score_KD_plusCL'].tolist()
+CL_induce_KD_down['score_shNT_plusCL'] = tmp.loc[CL_induce_KD_down['label'].tolist(), 'score_shNT_plusCL'].tolist()
+CL_induce_KD_down['score_shNT_minusCL'] = tmp.loc[CL_induce_KD_down['label'].tolist(), 'score_shNT_minusCL'].tolist()
+
+
+CL_induce_KD_down_EP, CL_induce_KD_down_PP, CL_induce_KD_down_PO, CL_induce_KD_down_OO = _define_EP_PP_(CL_induce_KD_down, comp = 'plusCL_KD_vs_shNT')
+
+CL_induce_KD_down_tmp = pd.concat([CL_induce_KD_down_EP, CL_induce_KD_down_PP, CL_induce_KD_down_PO, CL_induce_KD_down_OO])
+CL_induce_KD_down_tmp['group'] = ['E-P']*CL_induce_KD_down_EP.shape[0]+['P-P']*CL_induce_KD_down_PP.shape[0]+['P-O']*CL_induce_KD_down_PO.shape[0]+['O-O']*CL_induce_KD_down_OO.shape[0]
+
+CL_induce_KD_down_tmp['score_delta'] = CL_induce_KD_down_tmp['score_KD_plusCL'] - CL_induce_KD_down_tmp['score_shNT_plusCL']
+CL_induce_KD_down_tmp['mRNA_fc'] = CL_induce_KD_down_tmp[['r1_mRNA_fc', 'r2_mRNA_fc']].apply(lambda row: row.dropna().mean(), axis = 1)
+
+CL_induce_KD_down_exp = _get_values_(CL_induce_KD_down_tmp, comp = 'plusCL_KD_vs_shNT')
+CL_induce_KD_down_z = _get_values_(CL_induce_KD_down_tmp, comp = 'plusCL_KD_vs_shNT', value = 'stat')
+
+df = []
+for i, line in CL_induce_KD_down_z.iterrows():
+    if not pd.isna(line['r1_gene']):
+        for g in line['r1_gene'].split(';'):
+            df.append([g, line['group'], line['r1_gene'], line['r2_gene'], line['label']])
+    if not pd.isna(line['r2_gene']):
+        for g in line['r2_gene'].split(';'):
+            df.append([g, line['group'], line['r1_gene'], line['r2_gene'], line['label']])
+df = pd.DataFrame(df, columns = ['gene', 'group', 'r1_gene', 'r2_gene', 'loop']).drop_duplicates()
+df = df[df['gene'].isin(diffexp['plusCL_KD_vs_shNT'].index)]
+df['stat'] = [diffexp['plusCL_KD_vs_shNT'].loc[x, 'stat'] for x in df['gene'].tolist()]
+
+l1 = list(set(df.query('group == "E-P"')['gene'].tolist()))
+l2 = list(set(df.query('group == "P-P"')['gene'].tolist()))
+l3 = list(set(df.query('group == "P-O"')['gene'].tolist()))
+
+l = list(np.intersect1d(l1, l2))+list(np.intersect1d(l1, l3))+list(np.intersect1d(l2, l3))
+
+fig, ax = plt.subplots(figsize = (4.5,4.5))
+sns.boxplot(data = df[~df['r1_gene'].isin(l) & ~df['r2_gene'].isin(l)], x = 'group', y = 'stat', 
+            order = ['E-P', 'P-P', 'P-O'], whis = 1.5, showfliers = False)
+ax.hlines([0], *ax.get_xlim(), linestyle = 'dashed', color = 'black', linewidth = .5)
+ax.set(xlabel = '', ylabel = 'Differential mRNA expression\n(z score of H2AZ KD vs WT)')
+ax.set_ylim(-3.3, 3.3)
+plt.tight_layout()
+# fig.savefig('Figures/CL_induce_H2AZKD_down_loop_target_gene_diff_box.pdf')
+plt.show()
+
+
+## H2AZ signal in CUT&RUN of in vivo adipocytes
+H2AZ_invivo_bw_list2={
+    "cold_rep1": './H2AZ_bw/T_H_1_mm10.uniq.bam.bw', ## T for cold treatment
+    "cold_rep2": './H2AZ_bw/T_H_2_mm10.uniq.bam.bw',
+    'cold_rep3': './H2AZ_bw/T_H_2_mm10.uniq.bam.bw',
+    'warm_rep1': './H2AZ_bw/C_H_2_mm10.uniq.bam.bw', # C for control 
+    'warm_rep2': './H2AZ_bw/C_H_2_mm10.uniq.bam.bw',
+    'warm_rep3': './H2AZ_bw/C_H_3_mm10.uniq.bam.bw',
+}
+
+H2AZ_invivo_plusCL_peaks = pd.read_csv('./H2AZ_bw/T_H_dedup.bgsub.Fnor.peaks.xls', sep = '\t').query('width_above_cutoff > 147')
+H2AZ_invivo_plusCL_peaks_bed = pybedtools.BedTool.from_dataframe(H2AZ_invivo_plusCL_peaks)
+H2AZ_invivo_minusCL_peaks = pd.read_csv('./H2AZ_bw/C_H_dedup.bgsub.Fnor.peaks.xls', sep = '\t').query('width_above_cutoff > 147')
+H2AZ_invivo_minusCL_peaks_bed = pybedtools.BedTool.from_dataframe(H2AZ_invivo_minusCL_peaks)
+H2AZ_invivo_plus_minusCL_union_bed = pybedtools.BedTool.from_dataframe(pd.concat([H2AZ_invivo_plusCL_peaks, H2AZ_invivo_minusCL_peaks]).query('abs(start - end) > 147').drop_duplicates())
+
+H2AZocc_loop_anchor1_bed = pybedtools.BedTool.from_dataframe(CL_induce_KD_down[['chrom1', 'start1', 'end1']])
+H2AZocc_loop_anchor2_bed = pybedtools.BedTool.from_dataframe(CL_induce_KD_down[['chrom2', 'start2', 'end2']])
+
+H2AZ_invivo_overlapped_H2AZocc_anchor1 = H2AZ_invivo_plus_minusCL_union_bed.intersect(H2AZocc_loop_anchor1_bed, wa = True).to_dataframe().drop_duplicates()
+H2AZ_invivo_overlapped_H2AZocc_anchor2 = H2AZ_invivo_plus_minusCL_union_bed.intersect(H2AZocc_loop_anchor2_bed, wa = True).to_dataframe().drop_duplicates()
+H2AZ_invivo_H2AZocc_overlapped = pd.concat([H2AZ_invivo_overlapped_H2AZocc_anchor1, H2AZ_invivo_overlapped_H2AZocc_anchor2]).iloc[:,:3].drop_duplicates()
+
+
+## extract bw to plot
+d = 2000
+bw_H2AZ_invivo_site_values = []
+for path in H2AZ_invivo_bw_list2:
+    bw = pyBigWig.open(H2AZ_invivo_bw_list2[path])
+    for i, line in H2AZ_invivo_H2AZocc_overlapped.iterrows():
+        c = line['start'] + int(abs((line['start']-line['end'])/2))
+        line['bw'] = bw.values(line['chrom'], c-d, c+d)
+        bw_H2AZ_invivo_site_values.append(line.values.tolist()+[path])
+
+df = pd.DataFrame(bw_H2AZ_invivo_site_values).groupby(4).apply(lambda d: pd.DataFrame(d[3].tolist()).mean())
+df['cond'] = [x.replace('_rep1', '').replace('_rep2', '').replace('_rep3', '') for x in df.index.tolist()]
+df = df.groupby('cond').mean()
+
+df22 = df.loc[:,range(1000, 3000)]
+
+fig,ax = plt.subplots(figsize = (6, 4))
+ax.plot(range(0, df.shape[1]), df.loc['cold',:], label = 'Cold', linewidth = 1.5, color = plt.cm.get_cmap('tab10')(1))
+ax.plot(range(0, df.shape[1]), df.loc['warm',:], label = 'TH', linewidth = 1.5, color = 'grey')
+ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon = False)
+ax.set(xlabel = 'H2AZ peaks in H2AZ-occu loop', ylabel = 'H2AZ signal')
+sns.despine()
+# ax.set_ylim(0.6, 2.3)
+plt.tight_layout()
+fig.savefig('H2AZ_invivo_signal_H2AZoccu_loop.pdf')
+plt.show()
+plt.close()
