@@ -2826,7 +2826,7 @@ sns.boxplot(plot_df.melt(), x = 'variable', y = 'value', hue = 'variable',
             order = ['score_shNT_minusCL', 'score_shNT_plusCL', 'score_KD_plusCL'],
             palette={'score_shNT_minusCL': 'grey', 'score_shNT_plusCL':plt.cm.get_cmap("tab10")(1),
                      'score_KD_plusCL':plt.cm.get_cmap("tab10")(0)},
-            ax = ax, showfliers = False, whis = 0.8)
+            ax = ax, showfliers = False, whis = 1.5)
 ax.tick_params(axis = 'x', rotation = 75)
 ax.set(xlabel='', ylabel='loop score',
        title = 'H2AZ-occupied connected loop')
@@ -2838,7 +2838,7 @@ plt.close()
 
 ## random sampling for background control
 np.random.seed(1234)
-random_loop = np.random.choice(dot_df.index, len(connected_loops))
+random_loop = np.random.choice(dot_df.index, 1000)
 
 plot_df = dot_df[dot_df.index.isin(random_loop)][['score_shNT_plusCL', 'score_shNT_minusCL', 'score_KD_plusCL']]
 fig, ax = plt.subplots(figsize = (4, 5))
@@ -2846,7 +2846,7 @@ sns.boxplot(plot_df.melt(), x = 'variable', y = 'value', hue = 'variable',
             order = ['score_shNT_minusCL', 'score_shNT_plusCL', 'score_KD_plusCL'],
             palette={'score_shNT_minusCL': 'grey', 'score_shNT_plusCL':plt.cm.get_cmap("tab10")(1),
                      'score_KD_plusCL':plt.cm.get_cmap("tab10")(0)},
-            ax = ax, showfliers = False, whis = .8)
+            ax = ax, showfliers = False, whis = 1.5)
 ax.tick_params(axis = 'x', rotation = 75)
 ax.set(xlabel='', ylabel='loop score',
        title = 'Random')
@@ -3350,7 +3350,7 @@ plot_df = pd.DataFrame([
 
 fig, ax = plt.subplots(figsize = (2,2.5))
 sns. boxplot(data = plot_df.query('cond != "KD"'), x = 'cond', y = 'value', showfliers = False, 
-               palette={'minusCL': 'grey', 'plusCL': 'darkorange', 'KD': plt.cm.get_cmap('tab10')(0)}, whis = 0.8)
+               palette={'minusCL': 'grey', 'plusCL': 'darkorange', 'KD': plt.cm.get_cmap('tab10')(0)}, whis = 1.5)
 # sns.swarmplot(data = plot_df.query('cond != "KD"'), x = 'cond', y = 'value', size = 1,
 #                palette={'minusCL': 'grey', 'plusCL': 'darkorange', 'KD': plt.cm.get_cmap('tab10')(0)})
 ax.set_ylabel('MED1 ChIP-seq Signal', fontsize = 8)
